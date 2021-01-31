@@ -1,9 +1,9 @@
-import Emoji from "../Emoji/Emoji";
+import { EMOJI_LIST, CHALLENGE_LENGTH } from "./config";
 import Capture from "../Capture/Capture";
-import DataContext from "./DataContext";
+import HandSet from "../HandSet";
 import * as tf from "@tensorflow/tfjs";
 import * as handpose from "@tensorflow-models/handpose";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 
 require("@tensorflow/tfjs-backend-webgl");
@@ -14,12 +14,44 @@ const Challenge = styled.div`
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  font-size: 50px;
 `;
 
 const HandChallenge = () => {
   const [model, setModel] = useState(null);
   const [brain, setBrain] = useState(null);
+  const [step, setStep] = useState(0);
+  const [challenge, setChallenge] = useState(0);
   const [prediction, setPrediction] = useState(null);
+
+  const generateChallenge = () => {
+    let combinationDict = {};
+    let indexRandom;
+    let emoji;
+    for (let i = 0; i < CHALLENGE_LENGTH; i++) {
+      let emojiList = [...EMOJI_LIST];
+      if (i > 0) {
+        let lastIndex = emojiList.indexOf(emoji);
+        if (lastIndex === emojiList.length - 1) {
+          emojiList.pop();
+        } else {
+          emojiList.splice(lastIndex, 1);
+        }
+      }
+      indexRandom = Math.floor(Math.random() * emojiList.length);
+      emoji = emojiList[indexRandom];
+      combinationDict[i] = [emojiList[indexRandom], false];
+    }
+    return combinationDict;
+  };
+
+  if (step === Object.keys(challenge).length) {
+    setStep(0);
+    setChallenge(generateChallenge());
+  } else if (EMOJI_LIST[prediction] === challenge[step][0]) {
+    challenge[step][1] = true;
+    setStep(step + 1);
+  }
 
   useEffect(() => {
     const loadHandPose = async () => {
@@ -34,30 +66,36 @@ const HandChallenge = () => {
     };
     loadHandPose();
     loadBrain();
+    setChallenge(generateChallenge());
   }, []);
 
-  const drawHands = async (context, video) => {
-    const predictions = await model.estimateHands(video);
-    if (predictions.length > 0) {
-      let inputs = [];
-      for (let i = 0; i < predictions[0].landmarks.length; i++) {
-        let x = predictions[0].landmarks[i][0];
-        let y = predictions[0].landmarks[i][1];
-        context.fillStyle = "#FFFFFF";
-        context.fillRect(x, y, 10, 10);
-        inputs.push(x);
-        inputs.push(y);
+  const drawHands = useCallback(
+    async (context, video) => {
+      const predictions = await model.estimateHands(video);
+      if (predictions.length > 0) {
+        let inputs = [];
+        for (let i = 0; i < predictions[0].landmarks.length; i++) {
+          let x = predictions[0].landmarks[i][0];
+          let y = predictions[0].landmarks[i][1];
+          context.fillStyle = "#FFFFFF";
+          context.fillRect(x, y, 10, 10);
+          inputs.push(x);
+          inputs.push(y);
+        }
+        if (predictions[0].handInViewConfidence > 0.9) {
+          let shape = [1, 42];
+          let tensor = tf.tensor(inputs, shape);
+          const brainPrediction = await brain.predict(tensor);
+          if (brainPrediction) {
+            tf.argMax(brainPrediction, 1)
+              .data()
+              .then((data) => console.log(setPrediction(data[0])));
+          }
+        }
       }
-      if (predictions[0].handInViewConfidence > 0.7) {
-        let shape = [1, 42];
-        let tensor = tf.tensor(inputs, shape);
-        const brainPrediction = await brain.predict(tensor);
-        tf.argMax(brainPrediction, 1)
-          .data()
-          .then((data) => console.log(setPrediction(data[0])));
-      }
-    }
-  };
+    },
+    [model, brain]
+  );
 
   if (!(model && brain)) {
     return <div>Loading !</div>;
@@ -65,10 +103,8 @@ const HandChallenge = () => {
     return (
       <>
         <Challenge>
+          <HandSet handDict={challenge} />
           <Capture drawFunction={drawHands} />
-          <DataContext.Provider value={prediction}>
-            <Emoji />
-          </DataContext.Provider>
         </Challenge>
       </>
     );
