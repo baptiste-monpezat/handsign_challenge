@@ -3,7 +3,11 @@ import { CONSTRAINTS } from "../VideoFeed/config";
 import { useRef, useCallback } from "react";
 import styled from "styled-components";
 
-const Capture = ({ drawFunction }) => {
+const Canvas = styled.canvas`
+  display: ${(props) => (props.displayCanvas ? "none" : "block")};
+`;
+
+const Capture = ({ drawFunction, onWarmUp, display }) => {
   const canvasRef = useRef(null);
 
   const handleCapture = useCallback(
@@ -27,8 +31,8 @@ const Capture = ({ drawFunction }) => {
 
   return (
     <>
-      <VideoFeed debug={true} onCapture={handleCapture} />
-      <canvas ref={canvasRef} {...CONSTRAINTS.video} />
+      <VideoFeed debug={false} onCapture={handleCapture} onWarmUp={onWarmUp} />
+      <Canvas ref={canvasRef} {...CONSTRAINTS.video} displayCanvas={display} />
     </>
   );
 };

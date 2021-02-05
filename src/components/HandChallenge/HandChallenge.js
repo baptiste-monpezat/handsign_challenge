@@ -1,4 +1,4 @@
-import { EMOJI_LIST, CHALLENGE_LENGTH } from "./config";
+import { EMOJI_LIST, CHALLENGE_LENGTH, LANDMARKS } from "./config";
 import Capture from "../Capture/Capture";
 import HandSet from "../HandSet";
 import * as tf from "@tensorflow/tfjs";
@@ -17,9 +17,17 @@ const Challenge = styled.div`
   font-size: 50px;
 `;
 
+const Signature = styled.div`
+  position: absolute;
+  font-size: 20px;
+  bottom: 0px;
+  right: 20px;
+`;
+
 const HandChallenge = () => {
   const [model, setModel] = useState(null);
   const [brain, setBrain] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
   const [challenge, setChallenge] = useState(0);
   const [prediction, setPrediction] = useState(null);
@@ -89,7 +97,7 @@ const HandChallenge = () => {
           if (brainPrediction) {
             tf.argMax(brainPrediction, 1)
               .data()
-              .then((data) => console.log(setPrediction(data[0])));
+              .then((data) => setPrediction(data[0]));
           }
         }
       }
@@ -97,14 +105,50 @@ const HandChallenge = () => {
     [model, brain]
   );
 
+  const warmUp = useCallback(
+    async (video) => {
+      let shape = [1, 42];
+      let tensor = tf.tensor(LANDMARKS, shape);
+      const brainPrediction = await brain.predict(tensor);
+      brainPrediction.dataSync();
+      brainPrediction.dispose();
+
+      await model.estimateHands(video);
+
+      setTimeout(() => {
+        setLoading(false);
+      }, 7000);
+    },
+    [model, brain]
+  );
+
   if (!(model && brain)) {
-    return <div>Loading !</div>;
+    return (
+      <img
+        alt=""
+        src="https://cdn.dribbble.com/users/989157/screenshots/4632455/loading-animation-bored-hand.gif"
+      />
+    );
   } else {
     return (
       <>
         <Challenge>
-          <HandSet handDict={challenge} />
-          <Capture drawFunction={drawHands} />
+          {loading ? (
+            <img
+              alt=""
+              src="https://cdn.dribbble.com/users/989157/screenshots/4632455/loading-animation-bored-hand.gif"
+            />
+          ) : (
+            <HandSet handDict={challenge} />
+          )}
+          <Capture
+            drawFunction={drawHands}
+            onWarmUp={warmUp}
+            display={loading}
+          />
+          <Signature>
+            <p>Coded with 🤙🏻 by Baptiste Monpezat</p>
+          </Signature>
         </Challenge>
       </>
     );

@@ -8,11 +8,12 @@ const Video = styled.video`
   left: 16px;
 `;
 
-const VideoFeed = ({ debug = false, fps = 60, onCapture }) => {
+const VideoFeed = ({ debug = false, fps = 60, onCapture, onWarmUp }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
     if (videoRef.current) {
+      const video = videoRef.current;
       let requestId;
       let newStream;
       navigator.mediaDevices
@@ -22,20 +23,25 @@ const VideoFeed = ({ debug = false, fps = 60, onCapture }) => {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
 
-          const update = (timestamp) => {
-            onCapture(timestamp, videoRef.current);
+          const onLoadedData = async () => {
+            await onWarmUp(video);
 
-            if (fps < 60) {
-              const timeout = setTimeout(() => {
+            const update = (timestamp) => {
+              onCapture(timestamp, videoRef.current);
+
+              if (fps < 60) {
+                const timeout = setTimeout(() => {
+                  requestId = requestAnimationFrame(update);
+                  clearTimeout(timeout);
+                }, 1000 / fps);
+              } else {
                 requestId = requestAnimationFrame(update);
-                clearTimeout(timeout);
-              }, 1000 / fps);
-            } else {
-              requestId = requestAnimationFrame(update);
-            }
+              }
+            };
+            requestId = requestAnimationFrame(update);
           };
 
-          requestId = requestAnimationFrame(update);
+          video.addEventListener("loadeddata", onLoadedData);
         })
         .catch((err) => {
           console.log(err);
@@ -49,7 +55,7 @@ const VideoFeed = ({ debug = false, fps = 60, onCapture }) => {
         if (requestId) cancelAnimationFrame(requestId);
       };
     }
-  }, [debug, fps, onCapture]);
+  }, [debug, fps, onCapture, onWarmUp]);
 
   return (
     <>
